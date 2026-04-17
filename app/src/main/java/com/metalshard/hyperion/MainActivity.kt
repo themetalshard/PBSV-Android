@@ -40,7 +40,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             var isDarkMode by remember { mutableStateOf(true) }
             var useDynamicColors by remember { mutableStateOf(true) }
-            // New state for Date Format preference
             var isDayMonthFormat by remember { mutableStateOf(true) }
 
             HyperionTheme(darkTheme = isDarkMode, dynamicColor = useDynamicColors) {
@@ -202,7 +201,6 @@ fun SettingsContent(
             Switch(checked = useDynamicColors, onCheckedChange = onDynamicColorsChange)
         }
 
-        // New Date Format Toggle
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.DateRange, null)
             Spacer(Modifier.width(16.dp))
@@ -281,7 +279,6 @@ fun CompactCard(event: ScheduleEvent, onClick: () -> Unit) {
 fun EventCardItem(event: ScheduleEvent, isDayMonthFormat: Boolean, onClick: () -> Unit) {
     val color = event.eventColor?.let { Color(it[0], it[1], it[2]) } ?: Color.Gray
 
-    // logic for date format
     val datePattern = if (isDayMonthFormat) "dd/MM" else "MM/dd"
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm $datePattern").withZone(ZoneId.systemDefault())
 
