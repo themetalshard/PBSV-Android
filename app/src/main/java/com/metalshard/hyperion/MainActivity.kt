@@ -40,6 +40,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var isDarkMode by remember { mutableStateOf(true) }
             var useDynamicColors by remember { mutableStateOf(true) }
+            // New state for Date Format preference
+            var isDayMonthFormat by remember { mutableStateOf(true) }
 
             HyperionTheme(darkTheme = isDarkMode, dynamicColor = useDynamicColors) {
                 Surface(
@@ -50,7 +52,9 @@ class MainActivity : ComponentActivity() {
                         isDarkMode = isDarkMode,
                         onDarkModeChange = { isDarkMode = it },
                         useDynamicColors = useDynamicColors,
-                        onDynamicColorsChange = { useDynamicColors = it }
+                        onDynamicColorsChange = { useDynamicColors = it },
+                        isDayMonthFormat = isDayMonthFormat,
+                        onDateFormatChange = { isDayMonthFormat = it }
                     )
                 }
             }
@@ -82,7 +86,9 @@ fun ScheduleScreen(
     isDarkMode: Boolean,
     onDarkModeChange: (Boolean) -> Unit,
     useDynamicColors: Boolean,
-    onDynamicColorsChange: (Boolean) -> Unit
+    onDynamicColorsChange: (Boolean) -> Unit,
+    isDayMonthFormat: Boolean,
+    onDateFormatChange: (Boolean) -> Unit
 ) {
     val schedule by vm.schedule.collectAsState()
     val isCalendarView by vm.isCalendarView
@@ -131,11 +137,11 @@ fun ScheduleScreen(
             } else {
                 val currentGroupData = schedule[activeGroup] ?: schedule[activeGroup.lowercase()] ?: emptyList()
                 if (isCalendarView) {
-                    MultiColumnContent(vm, currentGroupData)
+                    MultiColumnContent(vm, currentGroupData, isDayMonthFormat)
                 } else {
                     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(currentGroupData.sortedBy { it.time }) { event ->
-                            EventCardItem(event) { vm.selectedEvent.value = event }
+                            EventCardItem(event, isDayMonthFormat) { vm.selectedEvent.value = event }
                         }
                     }
                 }
@@ -151,7 +157,9 @@ fun ScheduleScreen(
                     isDarkMode = isDarkMode,
                     onDarkModeChange = onDarkModeChange,
                     useDynamicColors = useDynamicColors,
-                    onDynamicColorsChange = onDynamicColorsChange
+                    onDynamicColorsChange = onDynamicColorsChange,
+                    isDayMonthFormat = isDayMonthFormat,
+                    onDateFormatChange = onDateFormatChange
                 )
             }
         }
@@ -167,7 +175,9 @@ fun SettingsContent(
     isDarkMode: Boolean,
     onDarkModeChange: (Boolean) -> Unit,
     useDynamicColors: Boolean,
-    onDynamicColorsChange: (Boolean) -> Unit
+    onDynamicColorsChange: (Boolean) -> Unit,
+    isDayMonthFormat: Boolean,
+    onDateFormatChange: (Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -192,6 +202,17 @@ fun SettingsContent(
             Switch(checked = useDynamicColors, onCheckedChange = onDynamicColorsChange)
         }
 
+        // New Date Format Toggle
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.DateRange, null)
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = if (isDayMonthFormat) "Date Format: DD/MM" else "Date Format: MM/DD",
+                modifier = Modifier.weight(1f)
+            )
+            Switch(checked = isDayMonthFormat, onCheckedChange = onDateFormatChange)
+        }
+
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
         Text("Credits", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -206,8 +227,9 @@ fun SettingsContent(
 }
 
 @Composable
-fun MultiColumnContent(vm: ScheduleViewModel, events: List<ScheduleEvent>) {
-    val dayFormatter = DateTimeFormatter.ofPattern("EEE dd/MM")
+fun MultiColumnContent(vm: ScheduleViewModel, events: List<ScheduleEvent>, isDayMonthFormat: Boolean) {
+    val pattern = if (isDayMonthFormat) "EEE dd/MM" else "EEE MM/dd"
+    val dayFormatter = DateTimeFormatter.ofPattern(pattern)
     val scrollState = rememberScrollState()
     val eventsByDate = events.groupBy {
         Instant.ofEpochSecond(it.time).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -256,9 +278,13 @@ fun CompactCard(event: ScheduleEvent, onClick: () -> Unit) {
 }
 
 @Composable
-fun EventCardItem(event: ScheduleEvent, onClick: () -> Unit) {
+fun EventCardItem(event: ScheduleEvent, isDayMonthFormat: Boolean, onClick: () -> Unit) {
     val color = event.eventColor?.let { Color(it[0], it[1], it[2]) } ?: Color.Gray
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+
+    // logic for date format
+    val datePattern = if (isDayMonthFormat) "dd/MM" else "MM/dd"
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm $datePattern").withZone(ZoneId.systemDefault())
+
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(24.dp),
@@ -269,7 +295,11 @@ fun EventCardItem(event: ScheduleEvent, onClick: () -> Unit) {
             Surface(modifier = Modifier.fillMaxHeight().width(4.dp), color = color, shape = RoundedCornerShape(2.dp)) {}
             Spacer(Modifier.width(16.dp))
             Column {
-                Text(timeFormatter.format(Instant.ofEpochSecond(event.time)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = timeFormatter.format(Instant.ofEpochSecond(event.time)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Text(event.eventType, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("Host: ${event.trainer}", style = MaterialTheme.typography.bodySmall)
             }
@@ -289,7 +319,6 @@ fun EventDetailPopup(event: ScheduleEvent, onDismiss: () -> Unit) {
     val utcString = utcFormatter.format(instant)
     val unixString = event.time.toString()
 
-    // Clean notes specifically for the display
     val cleanNotes = event.notes?.replace(Regex("<:[a-zA-Z0-9_]+:[0-9]+>"), "")
         ?.replace("**", "") ?: "No notes provided."
 
