@@ -1,17 +1,15 @@
 package com.metalshard.hyperion.model
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import com.google.gson.annotations.SerializedName
 
-@Serializable
 data class ScheduleEvent(
-    @SerialName("Time") val time: Long,
-    @SerialName("Duration") val duration: Long,
-    @SerialName("EventType") val eventType: String,
-    @SerialName("Trainer") val trainer: String? = null,
-    @SerialName("Notes") val notes: String? = null,
-    @SerialName("TrainingID") val uuid: String? = null,
-    @SerialName("EventColor") val eventColor: List<Int>? = null,
-    @SerialName("TrainerId") val trainerId: Long? = null,
-    @SerialName("TrainerCommsId") val discordId: String? = null
+    @SerializedName("EventType") val eventType: String,
+    @SerializedName("Time") val time: Long,
+    @SerializedName("Duration") val duration: Int,
+    @SerializedName("Trainer") val trainer: String?,
+    @SerializedName("TrainerId") val trainerId: Long?,
+    @SerializedName("TrainingID") val uuid: String?,
+    @SerializedName("TrainerCommsId") val discordId: String?, // Updated key
+    @SerializedName("Notes") val notes: String?,
+    @SerializedName("EventColor") val eventColor: List<Int>?
 )

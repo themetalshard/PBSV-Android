@@ -1,7 +1,11 @@
 package com.metalshard.hyperion
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.metalshard.hyperion.model.ScheduleEvent
 import com.metalshard.hyperion.ui.ScheduleViewModel
@@ -28,29 +33,27 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-// RIP:
-// TheMetalShard (developer)
-// Primative_11 (main tester)
-// LunarThePr0t0g3n
-// Boltazon
-// Kyguy329 (Mac version)
-// TheSkout001 (for ideas)
-//
-// Well, thanks ATTG!
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         enableEdgeToEdge()
-
         setContent {
-            HyperionTheme {
+            // These states should ideally be in your ViewModel for persistence,
+            // but defined here for the functional logic.
+            var isDarkMode by remember { mutableStateOf(true) }
+            var useDynamicColors by remember { mutableStateOf(true) }
+
+            HyperionTheme(darkTheme = isDarkMode, dynamicColor = useDynamicColors) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ScheduleScreen()
+                    ScheduleScreen(
+                        isDarkMode = isDarkMode,
+                        onDarkModeChange = { isDarkMode = it },
+                        useDynamicColors = useDynamicColors,
+                        onDynamicColorsChange = { useDynamicColors = it }
+                    )
                 }
             }
         }
@@ -59,8 +62,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun HyperionTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean,
+    dynamicColor: Boolean,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -71,20 +74,25 @@ fun HyperionTheme(
         darkTheme -> darkColorScheme(primary = Color(0xFFD0BCFF))
         else -> lightColorScheme(primary = Color(0xFF6750A4))
     }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        content = content
-    )
+    MaterialTheme(colorScheme = colorScheme, content = content)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleScreen(vm: ScheduleViewModel = viewModel()) {
+fun ScheduleScreen(
+    vm: ScheduleViewModel = viewModel(),
+    isDarkMode: Boolean,
+    onDarkModeChange: (Boolean) -> Unit,
+    useDynamicColors: Boolean,
+    onDynamicColorsChange: (Boolean) -> Unit
+) {
     val schedule by vm.schedule.collectAsState()
     val isCalendarView by vm.isCalendarView
     val activeGroup = vm.activeGroup.value
     val selectedEvent = vm.selectedEvent.value
+    var showSettings by remember { mutableStateOf(false) }
+
+    val sheetState = rememberModalBottomSheetState()
 
     Scaffold(
         bottomBar = {
@@ -95,7 +103,6 @@ fun ScheduleScreen(vm: ScheduleViewModel = viewModel()) {
                     Triple("TMS", "Explosion", Icons.Filled.LocalFireDepartment),
                     Triple("PBM", "Camera", Icons.Filled.PhotoCamera)
                 )
-
                 navItems.forEach { (id, label, icon) ->
                     NavigationBarItem(
                         selected = activeGroup == id,
@@ -107,8 +114,18 @@ fun ScheduleScreen(vm: ScheduleViewModel = viewModel()) {
             }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { vm.isCalendarView.value = !isCalendarView }) {
-                Icon(if (isCalendarView) Icons.AutoMirrored.Filled.List else Icons.Default.CalendarViewWeek, null)
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Settings Button
+                SmallFloatingActionButton(
+                    onClick = { showSettings = true },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                }
+                // View Switch Button
+                FloatingActionButton(onClick = { vm.isCalendarView.value = !isCalendarView }) {
+                    Icon(if (isCalendarView) Icons.AutoMirrored.Filled.List else Icons.Default.CalendarViewWeek, null)
+                }
             }
         }
     ) { padding ->
@@ -117,13 +134,7 @@ fun ScheduleScreen(vm: ScheduleViewModel = viewModel()) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             } else {
                 val currentGroupData = schedule[activeGroup] ?: schedule[activeGroup.lowercase()] ?: emptyList()
-
-                if (currentGroupData.isEmpty()) {
-                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No events found for $activeGroup", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { vm.refresh() }, Modifier.padding(top = 8.dp)) { Text("Refresh") }
-                    }
-                } else if (isCalendarView) {
+                if (isCalendarView) {
                     MultiColumnContent(vm, currentGroupData)
                 } else {
                     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -134,10 +145,71 @@ fun ScheduleScreen(vm: ScheduleViewModel = viewModel()) {
                 }
             }
         }
+
+        // Settings Bottom Sheet
+        if (showSettings) {
+            ModalBottomSheet(
+                onDismissRequest = { showSettings = false },
+                sheetState = sheetState
+            ) {
+                SettingsContent(
+                    isDarkMode = isDarkMode,
+                    onDarkModeChange = onDarkModeChange,
+                    useDynamicColors = useDynamicColors,
+                    onDynamicColorsChange = onDynamicColorsChange
+                )
+            }
+        }
     }
 
     selectedEvent?.let { event ->
         EventDetailPopup(event, onDismiss = { vm.selectedEvent.value = null })
+    }
+}
+
+@Composable
+fun SettingsContent(
+    isDarkMode: Boolean,
+    onDarkModeChange: (Boolean) -> Unit,
+    useDynamicColors: Boolean,
+    onDynamicColorsChange: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+        // Dark Mode Toggle
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.DarkMode, null)
+            Spacer(Modifier.width(16.dp))
+            Text("Dark Mode", Modifier.weight(1f))
+            Switch(checked = isDarkMode, onCheckedChange = onDarkModeChange)
+        }
+
+        // Material You Toggle
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Palette, null)
+            Spacer(Modifier.width(16.dp))
+            Text("Dynamic Colors (Material You)", Modifier.weight(1f))
+            Switch(checked = useDynamicColors, onCheckedChange = onDynamicColorsChange)
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+        // Credits Section
+        Text("Credits", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        val credits = "TheMetalShard (Dev)\nLunarThePr0t0g3n (Tester)\nKyguy329 (Mac port)\nTheSkout001 (For discovering how to get event schedules)"
+        Text(
+            text = credits,
+            style = MaterialTheme.typography.bodySmall,
+            lineHeight = 20.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -159,7 +231,6 @@ fun MultiColumnContent(vm: ScheduleViewModel, events: List<ScheduleEvent>) {
                     fontWeight = FontWeight.Bold
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(dayEvents.sortedBy { it.time }) { event ->
                         CompactCard(event) { vm.selectedEvent.value = event }
@@ -216,9 +287,26 @@ fun EventCardItem(event: ScheduleEvent, onClick: () -> Unit) {
 
 @Composable
 fun EventDetailPopup(event: ScheduleEvent, onDismiss: () -> Unit) {
+    val context = LocalContext.current
     val instant = Instant.ofEpochSecond(event.time)
+
     val localFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault())
     val utcFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'").withZone(ZoneId.of("UTC"))
+
+    val localString = localFormatter.format(instant)
+    val utcString = utcFormatter.format(instant)
+    val unixString = event.time.toString()
+
+    // Clean notes specifically for the display
+    val cleanNotes = event.notes?.replace(Regex("<:[a-zA-Z0-9_]+:[0-9]+>"), "")
+        ?.replace("**", "") ?: "No notes provided."
+
+    fun copyToClipboard(text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Schedule Info", text)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -230,15 +318,19 @@ fun EventDetailPopup(event: ScheduleEvent, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
-                DetailItem("Local start", localFormatter.format(instant))
-                DetailItem("UTC start", utcFormatter.format(instant))
-                DetailItem("Unix timestamp", event.time.toString())
+                DetailItem("Local start", localString, onClick = { copyToClipboard(localString) })
+                DetailItem("UTC start", utcString, onClick = { copyToClipboard(utcString) })
+                DetailItem("Unix timestamp", unixString, onClick = { copyToClipboard(unixString) })
                 DetailItem("Duration", "${event.duration} minutes")
+
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                 DetailItem("Host", event.trainer ?: "N/A")
-                event.notes?.let { Text("Notes: $it", style = MaterialTheme.typography.bodyMedium) }
+                Text(text = "Notes: $cleanNotes", style = MaterialTheme.typography.bodyMedium)
+
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                DetailItem("UUID", event.uuid ?: "N/A", isSmall = true)
+
+                DetailItem("UUID", event.uuid ?: "N/A", isSmall = true, onClick = { copyToClipboard(event.uuid ?: "") })
                 DetailItem("Trainer ID", event.trainerId?.toString() ?: "N/A", isSmall = true)
                 DetailItem("Discord ID", event.discordId ?: "N/A", isSmall = true)
             }
@@ -247,10 +339,19 @@ fun EventDetailPopup(event: ScheduleEvent, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun DetailItem(label: String, value: String, isSmall: Boolean = false) {
-    Text(
-        text = "$label: $value",
-        style = if (isSmall) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodyMedium,
-        color = if (isSmall) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-    )
+fun DetailItem(
+    label: String,
+    value: String,
+    isSmall: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    Column(
+        modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
+    ) {
+        Text(
+            text = "$label: $value",
+            style = if (isSmall) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodyMedium,
+            color = if (isSmall) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+        )
+    }
 }
