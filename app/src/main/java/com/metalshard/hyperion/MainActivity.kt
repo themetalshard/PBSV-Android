@@ -38,8 +38,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // These states should ideally be in your ViewModel for persistence,
-            // but defined here for the functional logic.
             var isDarkMode by remember { mutableStateOf(true) }
             var useDynamicColors by remember { mutableStateOf(true) }
 
@@ -115,14 +113,12 @@ fun ScheduleScreen(
         },
         floatingActionButton = {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Settings Button
                 SmallFloatingActionButton(
                     onClick = { showSettings = true },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer
                 ) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings")
                 }
-                // View Switch Button
                 FloatingActionButton(onClick = { vm.isCalendarView.value = !isCalendarView }) {
                     Icon(if (isCalendarView) Icons.AutoMirrored.Filled.List else Icons.Default.CalendarViewWeek, null)
                 }
@@ -146,7 +142,6 @@ fun ScheduleScreen(
             }
         }
 
-        // Settings Bottom Sheet
         if (showSettings) {
             ModalBottomSheet(
                 onDismissRequest = { showSettings = false },
@@ -183,7 +178,6 @@ fun SettingsContent(
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
-        // Dark Mode Toggle
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.DarkMode, null)
             Spacer(Modifier.width(16.dp))
@@ -191,7 +185,6 @@ fun SettingsContent(
             Switch(checked = isDarkMode, onCheckedChange = onDarkModeChange)
         }
 
-        // Material You Toggle
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Palette, null)
             Spacer(Modifier.width(16.dp))
@@ -201,7 +194,6 @@ fun SettingsContent(
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
-        // Credits Section
         Text("Credits", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         val credits = "TheMetalShard (Dev)\nLunarThePr0t0g3n (Tester)\nKyguy329 (Mac port)\nTheSkout001 (For discovering how to get event schedules)"
         Text(
