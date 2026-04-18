@@ -2,26 +2,42 @@ package com.metalshard.hyperion.data
 
 import com.metalshard.hyperion.model.ScheduleEvent
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL
 
 class ScheduleRepository {
-    private val url = "https://pbsv.themetalshard.space/schedule.json"
+    private val url = "https://pbsv.themetalshard.space/api/"
     private val gson = Gson()
 
     suspend fun fetchSchedule(): Map<String, List<ScheduleEvent>> = withContext(Dispatchers.IO) {
         try {
             val jsonText = URL(url).readText()
 
-            // 1. Parse into a nested map: Group -> (UUID -> Event)
-            val type = object : com.google.gson.reflect.TypeToken<Map<String, Map<String, ScheduleEvent>>>() {}.type
-            val nestedData: Map<String, Map<String, ScheduleEvent>> = gson.fromJson(jsonText, type)
+            val listType = object : TypeToken<List<Map<String, Any>>>() {}.type
+            val rawList: List<Map<String, Any>> = gson.fromJson(jsonText, listType)
 
-            // 2. Flatten the inner map so it's just Group -> List of Events
-            nestedData.mapValues { entry ->
-                entry.value.values.toList().sortedBy { it.time }
+            val finalMap = mutableMapOf<String, List<ScheduleEvent>>()
+
+            rawList.forEach { groupMap ->
+                val groupId = groupMap["id"] as? String ?: "unknown"
+
+                val eventsInGroup = mutableListOf<ScheduleEvent>()
+
+                groupMap.forEach { (key, value) ->
+                    if (key != "id") {
+                        try {
+                            val eventJson = gson.toJson(value)
+                            val event = gson.fromJson(eventJson, ScheduleEvent::class.java)
+                            eventsInGroup.add(event)
+                        } catch (e: Exception) {
+                        }
+                    }
+                }
+                finalMap[groupId] = eventsInGroup.sortedBy { it.time }
             }
+            finalMap
         } catch (e: Exception) {
             e.printStackTrace()
             emptyMap()
